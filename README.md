@@ -1,0 +1,419 @@
+# HubSpot + n8n：台灣 SME 的第一個 CRM AI Workflow
+
+> 這不是 HubSpot 教學。這是你導入 HubSpot 之後，怎麼讓它「開始變聰明」的第一步。
+
+---
+
+## 給誰看的？
+
+| 角色 | 你的痛點 | 這份東西幫你做什麼 |
+|---|---|---|
+| **業務主管** | 新 lead 不知道幾天後才有人跟進 | Slack/LINE 立刻收到通知，AI 已幫你判斷優先順序 |
+| **行銷** | 不知道哪些表單填寫者是真的客戶 | AI 自動分類 lead 類型，結果寫回 HubSpot，報表直接可用 |
+| **IT / 工程師** | 老闆說「讓 HubSpot 更聰明」但不知道從哪裡下手 | 一個可以 import 進 n8n 的 workflow，改幾個參數就能跑 |
+
+---
+
+## 整個流程一句話
+
+> HubSpot 有新 lead → n8n 自動抓資料 → AI 判斷類型和緊急度 → 通知業務 → 把結果寫回 HubSpot
+
+```
+┌──────────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────────┐     ┌──────────────────┐
+│  HubSpot     │     │  n8n     │     │   n8n    │     │  OpenAI  │     │  通知          │     │  HubSpot         │
+│  Webhook     │ ──► │  Webhook │ ──► │  抓資料   │ ──► │  分類    │ ──► │  Slack / Email │ ──► │  寫回 Note /     │
+│  (推送事件)   │     │  (接收)   │     │          │     │          │     │               │     │  Property        │
+└──────────────┘     └──────────┘     └──────────┘     └──────────┘     └──────────────┘     └──────────────────┘
+```
+
+---
+
+## 名詞快查
+
+| 詞 | 白話 |
+|---|---|
+| **HubSpot** | 客戶名單系統（像 Excel + 業務系統） |
+| **n8n** | 自動化流程工具（像 Zapier，但可以自己架、免費） |
+| **LLM / AI** | 幫你判斷內容的模型（像 OpenAI GPT、Claude） |
+| **Private App Token** | HubSpot 給你的一把鑰匙，讓外部工具讀寫你的資料 |
+| **OAuth2** | 比較複雜的鑰匙，適合要給別人用的情況 |
+| **Workflow** | 自動化流程——定義「什麼事發生 → 做什麼反應」 |
+
+---
+
+## HubSpot 認證 Decision Tree
+
+這是最容易卡死的地方。HubSpot 有三種方式讓 n8n 連進去讀寫資料，但不是每一種都適合你。
+
+### Decision Tree
+
+```
+你的 n8n 是要連「自己公司」的 HubSpot 嗎？
+│
+├─ 是 ──► 只要自己公司用，不需要給客戶裝
+│         │
+│         ├─ 是 ──► ✅ 用 Private App Token（往下看 §A）
+│         │
+│         └─ 否，要做成 SaaS 給別人用 ──► 用 OAuth2（往下看 §B）
+│
+└─ 否，要連別人的 HubSpot ──► 用 OAuth2（往下看 §B）
+
+
+那 Service Keys 呢？ ──► ❌ 不建議（往下看 §C）
+```
+
+---
+
+### A. Private App Token（✅ 建議第一版用這個）
+
+**適合**：自己公司用、內部自動化、一個 HubSpot 帳號對一個 n8n
+
+**優點**：
+- 設定最簡單，5 分鐘搞定
+- 不需要 redirect URL、不需要 developer 帳號
+- 一個 token 搞定讀寫
+
+**缺點**：
+- Token 屬於建立者個人——如果那人離職，token 會失效
+- 無法自動 refresh，過期要手動換
+- 不適合多租戶（multi-tenant）場景
+
+**設定步驟**：
+
+1. 登入 HubSpot → 左上 ⚙️ Settings
+2. 左側選單 → Integrations → Private Apps
+3. Create private app
+4. 填 App 名稱（例如 `n8n-workflow`）和描述
+5. 切到 Scopes tab，加入以下權限：
+
+| 類別 | 權限 | Scope 名稱 |
+|---|---|---|
+| CRM | Contacts 讀寫 | `crm.objects.contacts.read` / `crm.objects.contacts.write` |
+| CRM | Deals 讀寫 | `crm.objects.deals.read` / `crm.objects.deals.write` |
+| CRM | Companies 讀寫 | `crm.objects.companies.read` / `crm.objects.companies.write` |
+| CRM | Owners 讀 | `crm.objects.owners.read` |
+| CRM | Lists 寫 | `crm.lists.write` |
+
+6. Create app → Show token → 複製 token
+7. 進 n8n → Credentials → Add credential → HubSpot API → 選 App Token → 貼上
+
+> ⚠️ **Token 只會顯示一次**，請立刻存到密碼管理器。如果忘了，只能重新產生。
+
+---
+
+### B. OAuth2（進階用，第一版通常不需要）
+
+**適合**：做 SaaS 產品、給客戶裝、需要多個 HubSpot 帳號授權
+
+**優點**：
+- 用戶自己授權，不需要把 token 給你
+- 自動 refresh，不會過期斷線
+- 適合多租戶架構
+
+**缺點**：
+- 需要 HubSpot Developer 帳號
+- 需要設定 Redirect URL
+- 設定步驟多，除錯成本高
+- n8n Cloud 可以一鍵連接，但 self-hosted 需要手動設
+
+**設定步驟（self-hosted n8n）**：
+
+1. 到 [HubSpot Developer](https://developers.hubspot.com/) 註冊 developer 帳號
+2. Apps → Create app → 填 App Info
+3. Auth tab → 複製 Client ID、Client Secret、App ID
+4. Scopes → 加入和 Private App Token 相同的權限
+5. Redirect URL → 填 n8n 的 OAuth callback URL（格式：`https://你的n8n網址/rest/oauth2-credential/callback`）
+6. 進 n8n → Credentials → Add credential → HubSpot API → 選 OAuth2 → 填入 Client ID、Client Secret
+7. 點 Connect my account → 瀏覽器會跳轉到 HubSpot 授權頁面 → 授權完成
+
+> ⚠️ 如果你的 n8n 跑在 localhost 或內網，OAuth2 的 redirect 會需要額外處理。第一版建議先用 Private App Token。
+
+---
+
+### C. Service Keys（❌ 不建議）
+
+| 項目 | 說明 |
+|---|---|
+| **是什麼** | HubSpot 的 Server-to-Server OAuth，設計給後端服務用的 |
+| **為什麼不建議** | 很多功能不支援（例如 webhook 註冊、部分 CRM write 操作） |
+| **適用場景** | 只有在做 batch 資料同步、不需要即時事件觸發時才考慮 |
+| **n8n 支援** | n8n 的 HubSpot node 不原生支援 Service Keys，需要用 HTTP Request node 自己呼叫 API |
+
+> 結論：如果你不確定，就用 Private App Token。Service Keys 留給需要 batch 同步的進階場景。
+
+---
+
+## n8n Credentials 設定對照
+
+| 認證方式 | n8n Credential 類型 | 需要填什麼 | 適用 Node |
+|---|---|---|---|
+| Private App Token | HubSpot API → App Token | 一個 Access Token | HubSpot node（讀寫聯絡人、Deal、Note） |
+| OAuth2 | HubSpot API → OAuth2 | Client ID + Client Secret | HubSpot node（多租戶場景） |
+| — | Webhook node | 不需要 credential | 接收 HubSpot 推送事件 |
+
+> 💡 **第一版最簡路徑**：Webhook node 接收事件 + Private App Token 讀寫 HubSpot 資料。全程不需要 Developer 帳號。
+
+---
+
+## Workflow 說明
+
+這個 workflow 有七個主要步驟：
+
+| 步驟 | Node | 做什麼 |
+|---|---|---|
+| 1 | `Webhook` | 接收 HubSpot 推送的「新 Contact」事件 |
+| 2 | `HubSpot` (Get Contact) | 用 contact ID 去抓完整資料（姓名、公司、職稱、email） |
+| 3 | `HTTP Request` (Get Associated Deals) | 用 HubSpot Associations API 抓這個 contact 關聯的 deal |
+| 4 | `OpenAI` | 分類 urgency，推測缺失資料，標注 confirmed / inferred / missing |
+| 5 | `Code` (Parse AI Classification) | 把 AI 回傳的 JSON 字串 parse 成後續節點可讀的簡報欄位 |
+| 6 | `Switch` | 根據 AI 分類結果，走不同通知路徑 |
+| 6a | `Slack` | 高緊急 → Slack 發送業務跟進簡報 |
+| 6b | `Send Email` | 中緊急 → Email 發送業務跟進簡報 |
+| 6c | `HubSpot` (Create Note) | 低緊急 → 不通知，只寫回 HubSpot Note |
+| 7 | `HubSpot` (Create Note) | 三種緊急度都會把跟進簡報寫回原 contact 的 HubSpot Note |
+
+### AI 分類與資料補完邏輯
+
+AI 會根據以下資訊判斷：
+
+- **公司名稱 & 規模** → 是不是大客戶？
+- **職稱** → 是決策者還是詢價者？
+- **來源** → 是主動填表還是被動匯入？
+- **Deal 關聯** → 這個 contact 是否已經有關聯 deal？
+
+AI 輸出會分成四塊，讓業務知道哪些可以信、哪些要問：
+
+| 區塊 | 用途 | 範例 |
+|---|---|---|
+| `confirmed_data` | HubSpot 已有、客戶實填或系統已確認的資料 | Email、姓名、公司名稱 |
+| `inferred_data` | AI 根據現有資料推測，必須標注信心程度 | 公司規模：中型、產業：製造業 |
+| `missing_data` | 業務需要補問的欄位 | 預算、導入時間表、決策流程 |
+| `follow_up_questions` | 業務可直接使用的問句 | 「您目前團隊大概幾位同仁會使用？」 |
+
+分類結果：
+
+| 類型 | 定義 | 通知方式 |
+|---|---|---|
+| 🔴 **High** | 大客戶 / 高意願 / 決策者 | Slack 即時通知 |
+| 🟡 **Medium** | 有興趣但需要培育 | Email 通知 |
+| 🟢 **Low** | 初步詢價 / 資訊收集 | 只寫回 HubSpot，不打擾 |
+
+### 業務跟進簡報格式
+
+通知業務時，訊息會長這樣：
+
+```text
+✅ 確認資料
+Email: amy@example.com
+姓名: Amy Chen
+
+🔍 AI 推測，待業務確認
+公司規模: 中型（信心：medium；依據：公司名稱與職稱）
+產業: 製造業（信心：low；依據：公司 domain / 公司名稱線索）
+
+❓ 待確認
+預算: HubSpot 尚未提供，業務需確認
+時間表: 尚未知道是否本季導入
+
+📋 建議問法
+1. 您目前團隊大概幾位同仁會使用這套流程？
+2. 如果評估順利，預計希望什麼時間開始導入？
+```
+
+這個設計的重點是：AI 可以先幫業務做功課，但所有推測值都會標成 `ai_inferred_pending_confirmation`，等業務跟進後再用真實資料覆蓋。
+
+### HubSpot Property 建議
+
+如果你想把「AI 推測 vs 業務確認」做成 KPI，建議在 HubSpot contact 建這些自訂欄位：
+
+| Property | 類型 | 用途 |
+|---|---|---|
+| `ai_inferred_company_size` | Single-line text | AI 推測公司規模 |
+| `ai_inferred_industry` | Single-line text | AI 推測產業 |
+| `ai_inference_confidence` | Dropdown | `low` / `medium` / `high` |
+| `data_completion_status` | Dropdown | `ai_inferred` / `sales_confirmed` / `incomplete` |
+| `sales_confirmed_at` | Date picker | 業務完成確認的日期 |
+| `missing_fields_to_confirm` | Multi-line text | 待確認欄位清單 |
+
+第一版 workflow 先用 HubSpot Note 保存完整簡報，避免 import 時因為自訂欄位不存在而失敗。等欄位建好後，可以再加一個 HubSpot Update Contact node，把 AI 推測值寫到上述 properties。
+
+### KPI 追蹤方式
+
+| KPI | 定義 |
+|---|---|
+| 資料補完時效 | 收到 AI 跟進簡報後，業務在 7 天內把 `data_completion_status` 改成 `sales_confirmed` |
+| 補完比例 | 一週內完成確認的 leads / 所有新 leads |
+| AI 推測可用率 | 業務確認後未被修改的 AI 推測欄位 / AI 推測欄位總數 |
+
+---
+
+## 已修正的 Import 注意事項
+
+這份 `workflow.json` 已處理幾個常見踩雷點：
+
+| 問題 | 修正方式 |
+|---|---|
+| AI 回傳 JSON 字串，Switch 讀不到 `urgency` | 在 `AI Lead Classifier` 後加入 `Parse AI Classification` Code node |
+| HubSpot note 沒有掛到 contact | `Write Back to HubSpot` 已加入 `contactId`，會寫回原 contact |
+| Deal 節點抓到全部 deals | `Get Associated Deals` 改用 HubSpot Associations API，只抓目前 contact 關聯的 deals；若要用金額評分，可再加一個 batch read deals 節點 |
+| Low urgency 沒後續處理 | `low` 分支直接連到 `Write Back to HubSpot`，保留紀錄但不打擾業務 |
+| Switch node 三個 output 在某些 n8n 版本沒自動展開 | Import 後打開 `Route by Urgency`，確認 high / medium / low 三個 output 都已連到對應節點，缺的話手動拖線 |
+
+> 若你的 n8n 版本匯入 OpenAI node 後顯示 `resource=chat` 不支援，請在該節點手動改用新版 OpenAI Chat node，或改成舊版 `text / complete` 參數。其他節點邏輯不需要變。
+
+---
+
+## Import 指南
+
+### 前置條件
+
+- [ ] n8n 已安裝並運行（self-hosted 或 Cloud 皆可），且可以從外部訪問（HubSpot 需要能打到你們的 webhook URL）
+- [ ] HubSpot 帳號，且已有聯絡人資料
+- [ ] 已建立 HubSpot Private App Token（見上方 §A）
+- [ ] OpenAI API Key
+- [ ] （選用）Slack workspace + Bot Token
+- [ ] （選用）SMTP 設定（用於 Email 通知）
+
+### Import 步驟
+
+1. 下載 [`workflow.json`](./workflow.json)
+2. 打開 n8n → 左上選單 → Import from File → 選擇 `workflow.json`
+3. 設定 Credentials：
+   - 點每個 HubSpot node → 選擇你的 HubSpot credential（Private App Token）
+   - 點 `Get Associated Deals` HTTP Request node → credential type 選 HubSpot API，credential 選同一個 Private App Token
+   - 點 OpenAI node → 選擇你的 OpenAI credential
+   - 點 Slack node → 選擇你的 Slack credential（如果不用 Slack，可以刪掉這個 node）
+   - 點 Email node → 設定 SMTP credential
+4. 檢查每個 node 的參數：
+   - `Slack` node → 確認 channel 名稱
+   - `Send Email` node → **確認收件人 `toEmail` 和寄件人 `fromEmail`**（預設是範例值，必須改成你的實際 email）
+   - `OpenAI` node → 確認 model（預設 `gpt-4o-mini`，可換成其他模型）
+5. 點右上角 **Active** 開關啟動 workflow
+6. 複製 Webhook node 顯示的 **Test URL** 和 **Production URL**
+
+### 設定 HubSpot Webhook
+
+這個 workflow 用 Webhook 接收 HubSpot 事件，而不是用 n8n 的 HubSpot Trigger node。好處是：只需要 Private App Token，不需要 Developer 帳號。
+
+**方法一：用 HubSpot Workflow（推薦，最簡單）**
+
+1. 登入 HubSpot → Automation → Workflows
+2. 建立新 Workflow → 選「From scratch」→ 類型選「Contact-based」
+3. 設定觸發條件：`Contact created` 或你想要的篩選條件
+4. 加動作：`Send a webhook`
+   - Webhook URL → 貼上 n8n 的 **Production URL**
+   - Method → `POST`
+   - Request body → 選 `Custom`，填入：
+     ```json
+     {
+       "contactId": "{{ contact.objectId }}",
+       "email": "{{ contact.email }}",
+       "firstname": "{{ contact.firstname }}",
+       "lastname": "{{ contact.lastname }}",
+       "company": "{{ contact.company }}",
+       "jobtitle": "{{ contact.jobtitle }}"
+     }
+     ```
+5. 儲存並啟用 Workflow
+
+**方法二：用 HubSpot API（進階）**
+
+如果你需要更精確的事件控制（例如只監聽特定屬性變更），可以用 HubSpot 的 Webhooks API 註冊 webhook。這需要建立一個 Public App，流程比較複雜。第一版建議用方法一。
+
+### 測試建議
+
+- 先在 n8n 點 Webhook node 的 **Test** 按鈕，進入測試模式
+- 在 HubSpot 建一個測試 contact（例如公司名填「Test Corp」）
+- 確認 n8n 有收到 webhook 事件
+- 確認整條流程跑通：high 有 Slack、medium 有 Email，三種 urgency 都會在原 HubSpot contact 底下新增 Note
+- 測試成功後，記得切回 Production 模式（關掉 Test，開啟 Active）
+
+---
+
+## 自訂建議
+
+### 換 AI 模型
+
+OpenAI node 可以換成其他 LLM：
+
+| 想用 | n8n Node | 備註 |
+|---|---|---|
+| Claude | Anthropic node | 需要 Anthropic API Key |
+| Gemini | Google Gemini node | 需要 Google AI API Key |
+| 自架模型 | HTTP Request node | 呼叫自己的 Ollama / vLLM endpoint |
+
+### 加 LINE 通知
+
+把 Slack node 複製一份，類型換成 `HTTP Request`，呼叫 LINE Messaging API：
+
+```
+POST https://api.line.me/v2/bot/message/push
+Header: Authorization: Bearer {LINE_CHANNEL_ACCESS_TOKEN}
+Body: { "to": "{USER_ID}", "messages": [{ "type": "text", "text": "..." }] }
+```
+
+### 改分類邏輯
+
+在 OpenAI node 的 prompt 裡調整分類條件。例如：
+
+- 加「是否來自競品」的判斷
+- 加「是否在特定產業」的判斷
+- 把三級分類改成五級
+
+### 加 Deal 自動建立
+
+在 HubSpot Create Note 之前加一個 HubSpot node：
+
+- 類型：`Create` → `Deal`
+- 條件：AI 分類為 High 時，自動建一個 deal
+- Pipeline 和 Stage 可以根據你的 HubSpot 設定調整
+
+---
+
+## 常見問題
+
+### HubSpot Webhook 沒有觸發？
+
+1. 確認 n8n workflow 是 Active 狀態
+2. 確認 HubSpot Workflow 有啟用，且 webhook URL 是 n8n 的 **Production URL**（不是 Test URL）
+3. 確認你的 n8n URL 可以從 HubSpot 訪問到（self-hosted 不能用 `localhost`，需要公開域名或 tunnel）
+4. 如果用 tunnel 工具（如 ngrok），確認 tunnel 還活著
+5. 在 n8n 的 Webhook node 點 Test 進測試模式，手動在 HubSpot 建一個 contact，看 n8n 有沒有收到請求
+
+### OpenAI 分類不準？
+
+1. 調整 prompt，加入你的產業特定判斷條件
+2. 換用更強的模型（`gpt-4o` 或 `claude-sonnet`）
+3. 在 prompt 裡加 few-shot 範例（例如「如果職稱是 CTO，分類為 High」）
+
+### n8n 跑在 localhost，HubSpot 打不到怎麼辦？
+
+HubSpot 需要能從外部訪問你的 webhook URL。如果你的 n8n 跑在本機，可以用以下方法：
+
+| 方法 | 指令 | 備註 |
+|---|---|---|
+| ngrok | `ngrok http 5678` | 免費版即可，每次重啟 URL 會變 |
+| cloudflare tunnel | `cloudflared tunnel --url http://localhost:5678` | 免費，穩定 |
+| n8n Cloud | 直接用 | 最簡單，但需付費 |
+
+### Token 過期怎麼辦？
+
+Private App Token 預設不會過期，但如果建立者被移除 HubSpot 帳號，token 會失效。建議：
+- 用一個 service account 建立 Private App
+- 或者在團隊共用的密碼管理器裡記錄 token
+- 長期考慮遷移到 OAuth2
+
+---
+
+## 檔案清單
+
+| 檔案 | 說明 |
+|---|---|
+| [`README.md`](./README.md) | 你正在看的這份文件 |
+| [`workflow.json`](./workflow.json) | 可直接 import 到 n8n 的 workflow JSON |
+
+---
+
+## 授權
+
+MIT License — 自由使用、修改、散佈。不需要標註來源，但如果這份東西幫到你，歡迎分享給其他台灣 SME。

@@ -1,0 +1,374 @@
+{
+  "name": "HubSpot Lead AI Classifier (TW SME)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hubspot-new-contact",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "HubSpot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "get",
+        "contactId": "={{ $json.contactId || $json.objectId || $json.vid }}",
+        "additionalFields": {
+          "propertiesCollection": [
+            { "key": "company" },
+            { "key": "jobtitle" },
+            { "key": "hs_lead_status" },
+            { "key": "email" },
+            { "key": "firstname" },
+            { "key": "lastname" }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000002",
+      "name": "Get Contact Details",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [
+        260,
+        300
+      ],
+      "credentials": {
+        "hubspotApi": {
+          "id": "",
+          "name": "HubSpot Private App"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotApi",
+        "url": "=https://api.hubapi.com/crm/v4/objects/contacts/{{ $('Get Contact Details').item.json.id }}/associations/deals",
+        "options": {},
+        "method": "GET",
+        "sendHeaders": false
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000003",
+      "name": "Get Associated Deals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        300
+      ],
+      "credentials": {
+        "hubspotApi": {
+          "id": "",
+          "name": "HubSpot Private App"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "create",
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "你是台灣中小企業的 CRM 助理。請根據 HubSpot 聯絡人資料和關聯 deal 資料，做 lead 分類與業務跟進簡報。\n\n重要原則：\n- 不要把 AI 推測當成事實。\n- 已由 HubSpot 提供的欄位放在 confirmed_data。\n- 由公司名稱、職稱、email domain、來源、deal 關聯推測出的資料放在 inferred_data，並標注 confidence。\n- 需要業務補問的資料放在 missing_data 和 follow_up_questions。\n\n請只回覆 JSON，不要加任何說明文字：\n```json\n{\n  \"urgency\": \"high|medium|low\",\n  \"lead_type\": \"decision_maker|evaluator|information_seeker\",\n  \"reason\": \"一句話說明為什麼這樣分類\",\n  \"suggested_action\": \"建議業務人員採取的下一步\",\n  \"confirmed_data\": [\n    { \"field\": \"email\", \"label\": \"Email\", \"value\": \"客戶實填值\" }\n  ],\n  \"inferred_data\": [\n    { \"field\": \"company_size\", \"label\": \"公司規模\", \"value\": \"中型\", \"confidence\": \"low|medium|high\", \"why\": \"推測依據\", \"status\": \"ai_inferred_pending_confirmation\" }\n  ],\n  \"missing_data\": [\n    { \"field\": \"budget\", \"label\": \"預算\", \"reason\": \"HubSpot 尚未提供，業務需確認\" }\n  ],\n  \"follow_up_questions\": [\n    \"您目前團隊大概幾位同仁會使用這套流程？\"\n  ],\n  \"kpi_tracking_hint\": \"建議業務在 7 天內補完預算、時間表、決策者欄位\"\n}\n```\n\n分類規則：\n- urgency=high：職稱含 C-level/VP/Director、已有關聯 deal、職稱或公司資訊顯示購買意圖高、主動填表而來\n- urgency=medium：職稱含 Manager/Lead、有明確需求描述、有關聯 deal 但決策訊號還不明確\n- urgency=low：職稱為工程師/實習生/學生、純詢價、無 deal 或資訊不足\n\n推測規則：\n- company_size、industry、buying_intent 可以推測，但一定要放在 inferred_data。\n- budget、timeline、decision_process 通常需要業務確認，資訊不足時放在 missing_data。\n- follow_up_questions 要寫成業務可直接拿去問客戶的自然問句。"
+            },
+            {
+              "role": "user",
+              "content": "=聯絡人資料：\n姓名：{{ $json.properties.firstname }} {{ $json.properties.lastname }}\n公司：{{ $json.properties.company }}\n職稱：{{ $json.properties.jobtitle }}\nEmail：{{ $json.properties.email }}\n來源：{{ $json.properties.hs_lead_status }}\n\n關聯 Deal 資料：\n{{ JSON.stringify($('Get Associated Deals').item.json, null, 2) }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.2,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000004",
+      "name": "AI Lead Classifier",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1.2,
+      "position": [
+        760,
+        300
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.item.json.message?.content\n  ?? $input.item.json.choices?.[0]?.message?.content\n  ?? $input.item.json.text\n  ?? $input.item.json.content\n  ?? '';\n\nconst asArray = (value) => Array.isArray(value) ? value : [];\n\nlet parsed;\ntry {\n  const cleaned = String(raw).replace(/```json|```/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  // JSON parse 失敗時 fallback 到 urgency=low\n  parsed = {\n    urgency: 'low',\n    lead_type: 'information_seeker',\n    reason: 'AI 回應格式異常，已降級為 low',\n    suggested_action: '請手動檢視此 lead',\n    confirmed_data: [],\n    inferred_data: [],\n    missing_data: [{ field: 'all', label: '全部欄位', reason: 'AI 分類失敗，需業務手動確認' }],\n    follow_up_questions: [],\n    kpi_tracking_hint: 'AI 分類失敗，請業務盡速手動確認'\n  };\n}\n\nreturn [{\n  json: {\n    urgency: parsed.urgency || 'low',\n    lead_type: parsed.lead_type || 'information_seeker',\n    reason: parsed.reason || '',\n    suggested_action: parsed.suggested_action || '',\n    confirmed_data: asArray(parsed.confirmed_data),\n    inferred_data: asArray(parsed.inferred_data),\n    missing_data: asArray(parsed.missing_data),\n    follow_up_questions: asArray(parsed.follow_up_questions),\n    kpi_tracking_hint: parsed.kpi_tracking_hint || '建議業務在 7 天內補完關鍵欄位',\n    raw_ai_response: raw,\n    parse_error: !parsed.urgency ? true : false\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000009",
+      "name": "Parse AI Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "high",
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.urgency }}",
+                    "rightValue": "high",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "medium",
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.urgency }}",
+                    "rightValue": "medium",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "outputKey": "low",
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.urgency }}",
+                    "rightValue": "low",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000005",
+      "name": "Route by Urgency",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        1280,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "channel": "#crm-leads",
+        "text": "=🔴 高優先 Lead 跟進簡報\n\n姓名：{{ $('Get Contact Details').item.json.properties.firstname }} {{ $('Get Contact Details').item.json.properties.lastname }}\n公司：{{ $('Get Contact Details').item.json.properties.company }}\n職稱：{{ $('Get Contact Details').item.json.properties.jobtitle }}\n\nAI 分類：{{ $json.urgency }} / {{ $json.lead_type }}\n原因：{{ $json.reason }}\n建議行動：{{ $json.suggested_action }}\n\n✅ 確認資料\n{{ ($json.confirmed_data || []).map(item => `${item.label || item.field}: ${item.value}`).join('\n') || '無' }}\n\n🔍 AI 推測，待業務確認\n{{ ($json.inferred_data || []).map(item => `${item.label || item.field}: ${item.value}（信心：${item.confidence || 'unknown'}；依據：${item.why || '未提供'}）`).join('\n') || '無' }}\n\n❓ 待確認\n{{ ($json.missing_data || []).map(item => `${item.label || item.field}: ${item.reason || '需業務確認'}`).join('\n') || '無' }}\n\n📋 建議問法\n{{ ($json.follow_up_questions || []).map((question, index) => `${index + 1}. ${question}`).join('\n') || '無' }}\n\nKPI 提醒：{{ $json.kpi_tracking_hint }}\n\nHubSpot 連結：https://app.hubspot.com/contacts/{{ $('Get Contact Details').item.json.id }}"
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000006",
+      "name": "Slack High Urgency",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        100
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "",
+          "name": "Slack API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "crm-alerts@yourcompany.com",
+        "toEmail": "sales-team@yourcompany.com",
+        "subject": "=🟡 中優先 Lead 跟進簡報：{{ $('Get Contact Details').item.json.properties.company }}",
+        "text": "=中優先 Lead 跟進簡報\n\n姓名：{{ $('Get Contact Details').item.json.properties.firstname }} {{ $('Get Contact Details').item.json.properties.lastname }}\n公司：{{ $('Get Contact Details').item.json.properties.company }}\n職稱：{{ $('Get Contact Details').item.json.properties.jobtitle }}\nEmail：{{ $('Get Contact Details').item.json.properties.email }}\n\nAI 分類：{{ $json.urgency }} / {{ $json.lead_type }}\n原因：{{ $json.reason }}\n建議行動：{{ $json.suggested_action }}\n\n✅ 確認資料\n{{ ($json.confirmed_data || []).map(item => `${item.label || item.field}: ${item.value}`).join('\n') || '無' }}\n\n🔍 AI 推測，待業務確認\n{{ ($json.inferred_data || []).map(item => `${item.label || item.field}: ${item.value}（信心：${item.confidence || 'unknown'}；依據：${item.why || '未提供'}）`).join('\n') || '無' }}\n\n❓ 待確認\n{{ ($json.missing_data || []).map(item => `${item.label || item.field}: ${item.reason || '需業務確認'}`).join('\n') || '無' }}\n\n📋 建議問法\n{{ ($json.follow_up_questions || []).map((question, index) => `${index + 1}. ${question}`).join('\n') || '無' }}\n\nKPI 提醒：{{ $json.kpi_tracking_hint }}"
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000007",
+      "name": "Email Medium Urgency",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "note",
+        "body": "=🤖 AI Lead 跟進簡報\n\nAI 分類：{{ $json.urgency }} / {{ $json.lead_type }}\n原因：{{ $json.reason }}\n建議行動：{{ $json.suggested_action }}\n\n✅ 確認資料\n{{ ($json.confirmed_data || []).map(item => `${item.label || item.field}: ${item.value}`).join('\n') || '無' }}\n\n🔍 AI 推測，待業務確認\n{{ ($json.inferred_data || []).map(item => `${item.label || item.field}: ${item.value}（信心：${item.confidence || 'unknown'}；依據：${item.why || '未提供'}；狀態：${item.status || 'ai_inferred_pending_confirmation'}）`).join('\n') || '無' }}\n\n❓ 待確認\n{{ ($json.missing_data || []).map(item => `${item.label || item.field}: ${item.reason || '需業務確認'}`).join('\n') || '無' }}\n\n📋 建議問法\n{{ ($json.follow_up_questions || []).map((question, index) => `${index + 1}. ${question}`).join('\n') || '無' }}\n\nKPI 提醒：{{ $json.kpi_tracking_hint }}\n\n---\n由 HubSpot + n8n AI Workflow 自動產生。AI 推測資料需由業務確認後再覆蓋正式欄位。",
+        "contactId": "={{ $('Get Contact Details').item.json.id }}"
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000008",
+      "name": "Write Back to HubSpot",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        300
+      ],
+      "credentials": {
+        "hubspotApi": {
+          "id": "",
+          "name": "HubSpot Private App"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "HubSpot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Contact Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Contact Details": {
+      "main": [
+        [
+          {
+            "node": "Get Associated Deals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Associated Deals": {
+      "main": [
+        [
+          {
+            "node": "AI Lead Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Lead Classifier": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Urgency": {
+      "main": [
+        [
+          {
+            "node": "Slack High Urgency",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email Medium Urgency",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Write Back to HubSpot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack High Urgency": {
+      "main": [
+        [
+          {
+            "node": "Write Back to HubSpot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Medium Urgency": {
+      "main": [
+        [
+          {
+            "node": "Write Back to HubSpot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Classification": {
+      "main": [
+        [
+          {
+            "node": "Route by Urgency",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "",
+  "tags": [
+    {
+      "name": "hubspot",
+      "id": ""
+    },
+    {
+      "name": "ai-classifier",
+      "id": ""
+    },
+    {
+      "name": "tw-sme",
+      "id": ""
+    }
+  ]
+}
