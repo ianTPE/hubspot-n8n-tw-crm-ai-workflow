@@ -267,7 +267,36 @@ Email: amy@example.com
 
 ### 前置條件
 
-- [ ] n8n 已安裝並運行（self-hosted 或 Cloud 皆可），且可以從外部訪問（HubSpot 需要能打到你們的 webhook URL）
+- [ ] n8n 已安裝並運行，且可以從外部訪問（HubSpot 需要能打到你們的 webhook URL）
+
+  **n8n 必須跑在公開可達的環境**，有三個選項：
+
+  | 選項 | 月費估算 | 說明 | 適合誰 |
+  |---|---|---|---|
+  | **1. n8n Cloud Starter** | ~NT$830（月繳）/ ~NT$690（年繳省 17%）| 開箱即用，自帶 HTTPS URL，2,500 次執行/月 | 技術資源少的團隊、想最快跑起來 |
+  | **2. VPS 自架 Community 版** | ~NT$150–400 | 自架在 Hetzner / Vultr 等，需設定 domain + HTTPS + `WEBHOOK_URL`，執行次數無限制 | 有一點 DevOps 基礎、想省月費 |
+  | **3. 本機 + tunnel 工具** | 免費 | 用 ngrok / Cloudflare Tunnel 暫時打通 localhost | 只適合開發測試 |
+
+  <details>
+  <summary>📊 n8n Cloud 定價明細</summary>
+
+  | 方案 | 月繳（€/月） | 年繳（€/月，省 17%） | 月繳台幣 | 執行次數/月 | 適合對象 |
+  |---|---|---|---|---|---|
+  | **Starter** | €24 | €20 | ~NT$830 | 2,500 次 | 個人、小團隊初試 |
+  | **Pro** | €60 | €50 | ~NT$2,070 | 10,000 次 | 成長中的小團隊 |
+  | **Business** | €800 | €667 | ~NT$27,600 | 40,000 次 | 中大型企業 |
+  | **Enterprise** | 客製報價 | — | 洽詢 | 無限制 | 大企業 |
+
+  > 數字取自 [n8n 官網定價頁](https://n8n.io/pricing/)。匯率以 1 EUR ≈ 34.5 TWD 估算。所有方案皆**不限 active workflow 數與使用者數**，計費僅看執行次數。**第一版測試建議先選月繳**，跑穩再轉年繳省 17%。實際以官網最新報價為準。
+  </details>
+
+  <details>
+  <summary>💡 Starter 夠用嗎？算給你看</summary>
+
+  n8n 的 execution 是以「workflow 執行次數」計算（一次完整 run = 1 execution，不是 node 數）。假設每天平均 8 個新 lead，一個月約 240 次 webhook 觸發 = 240 executions——Starter 的 2,500 次有將近 10 倍 buffer，完全夠用。如果同時跑多條 workflow 或 lead 量更大，再升 Pro。
+  </details>
+
+  > **建議**：第一版從 **n8n Cloud Starter 月繳（~NT$830/月）** 開始——zero DevOps、webhook URL 立刻可用、穩定不斷線、隨時可停。等流程跑穩、確定要長期用，再轉年繳省 17%（~NT$690/月）或遷到 VPS 自架降低長期成本。
 - [ ] HubSpot 帳號，且已有聯絡人資料
 - [ ] 已建立 HubSpot Private App Token（見上方 §A）
 - [ ] OpenAI API Key
@@ -388,13 +417,18 @@ Body: { "to": "{USER_ID}", "messages": [{ "type": "text", "text": "..." }] }
 
 ### n8n 跑在 localhost，HubSpot 打不到怎麼辦？
 
-HubSpot 需要能從外部訪問你的 webhook URL。如果你的 n8n 跑在本機，可以用以下方法：
+HubSpot 的 webhook 是從 HubSpot 伺服器主動打出去的，你的 n8n 必須有一個**公開可達的 HTTPS URL**，localhost 預設無法接收。
 
-| 方法 | 指令 | 備註 |
-|---|---|---|
-| ngrok | `ngrok http 5678` | 免費版即可，每次重啟 URL 會變 |
-| cloudflare tunnel | `cloudflared tunnel --url http://localhost:5678` | 免費，穩定 |
-| n8n Cloud | 直接用 | 最簡單，但需付費 |
+有三種解法，適合不同場景：
+
+| 方法 | 指令 | 適合場景 | 注意事項 |
+|---|---|---|---|
+| **ngrok** | `ngrok http 5678` | 臨時測試 | 免費版每次重啟 URL 會變，HubSpot 那邊的 webhook URL 也要跟著改 |
+| **Cloudflare Tunnel** | `cloudflared tunnel --url http://localhost:5678` | 開發期間 | 免費、比 ngrok 穩定，但本機關機就斷 |
+| **n8n Cloud Starter** | 直接用 | 正式環境 | ~NT$830/月（月繳），最簡單，開箱即用；長期用轉年繳可降到 ~NT$690 |
+| **VPS 自架** | Docker + domain + HTTPS | 正式環境 | ~NT$150–400/月（Hetzner / Vultr），Community 版免費、執行次數無限制，但進階功能（全域變數、使用者管理等）需付 Business 費用 |
+
+> ⚠️ 本機架設不適合正式環境：筆電關機 → webhook 斷線，ngrok 免費版 URL 每次變動 → HubSpot webhook 也要跟著改，IT 不在場時沒人處理。
 
 ### Token 過期怎麼辦？
 
