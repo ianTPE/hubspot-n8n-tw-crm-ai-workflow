@@ -1,0 +1,15 @@
+services:
+  n8n:
+    image: n8nio/n8n:latest  # 正式環境建議 pin 版本，例如 n8nio/n8n:1.82.0
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    volumes:
+      - ./n8n-data:/home/node/.n8n
+    environment:
+      - N8N_SECURE_COOKIE=false
+      - N8N_PROXY_HOPS=1
+      - WEBHOOK_URL=${WEBHOOK_URL}
+      - GENERIC_TIMEZONE=Asia/Taipei
+      - TZ=Asia/Taipei

@@ -158,13 +158,90 @@ docker compose version
 
 ---
 
-## Step 3：建立 n8n 資料目錄
+## Step 3：建立 n8n-hubspot 專案目錄
+
+這個目錄會放 `docker-compose.yml`、`.env`、`.gitignore`，n8n 的資料也會存在裡面的 `n8n-data/` 子目錄。
+
+### 方法 A：從 repo 複製（推薦）
 
 ```bash
-mkdir -p ~/n8n-data
+# 先 clone repo（如果還沒有）
+git clone https://github.com/iantpe/hubspot-n8n-tw-crm-ai-workflow.git
+# ↑ 如果 repo 在別的地方，換成你的實際 URL
+
+# 複製設定目錄
+cp -r hubspot-n8n-tw-crm-ai-workflow/n8n-hubspot ~/n8n-hubspot
+cd ~/n8n-hubspot
+
+# 從範本建立 .env（.env 本身不會進 git，只有 .env.example 會）
+cp .env.example .env
 ```
 
-這個目錄會掛進 Docker container，n8n 的 credentials、workflow 歷史都存在這裡，container 刪掉重建也不會丟。
+### 方法 B：手動建立
+
+```bash
+mkdir -p ~/n8n-hubspot
+cd ~/n8n-hubspot
+```
+
+目錄結構：
+
+```
+~/n8n-hubspot/
+├── docker-compose.yml    ← Docker Compose 設定
+├── .env.example          ← .env 範本（會進 git）
+├── .env                  ← 實際環境變數（從 .env.example 複製，不會進 git）
+├── .gitignore            ← 排除 .env 和 n8n-data/
+└── n8n-data/             ← n8n 持久化資料（自動產生）
+```
+
+建立 `docker-compose.yml`：
+
+```yaml
+services:
+  n8n:
+    image: n8nio/n8n:latest  # 正式環境建議 pin 版本，例如 n8nio/n8n:1.82.0
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    volumes:
+      - ./n8n-data:/home/node/.n8n
+    environment:
+      - N8N_SECURE_COOKIE=false
+      - N8N_PROXY_HOPS=1
+      - WEBHOOK_URL=${WEBHOOK_URL}
+      - GENERIC_TIMEZONE=Asia/Taipei
+      - TZ=Asia/Taipei
+```
+
+建立 `.env.example`（範本，會進 git）：
+
+```bash
+cat > .env.example << 'EOF'
+# n8n Webhook 公網 URL（由 Cloudflare Tunnel 提供）
+# 使用前請先複製此檔案：cp .env.example .env
+# 每次啟動 Quick Tunnel 後，把拿到的 URL 貼到 .env，然後執行：
+#   docker compose up -d --force-recreate
+WEBHOOK_URL=https://your-tunnel-url.try-cloudflare.com
+EOF
+
+# 從範本建立你的 .env
+cp .env.example .env
+```
+
+建立 `.gitignore`：
+
+```bash
+cat > .gitignore << 'EOF'
+.env
+n8n-data/
+EOF
+```
+
+> `docker compose` 會自動讀取同目錄的 `.env`，所以 `WEBHOOK_URL` 不用寫死在 `docker-compose.yml` 裡。之後 tunnel URL 變了，只需要改 `.env` 再重啟就好。
+>
+> `.env` 不會進 git（`.gitignore` 已排除）。`n8n-data/` 裡有 n8n 加密儲存的 credentials（HubSpot Token、OpenAI Key 等），同樣已被排除。
 
 ---
 
@@ -217,19 +294,18 @@ cloudflared tunnel --url http://localhost:5678
 打開**另一個 WSL 終端機**（cloudflared 佔住原本那個），執行：
 
 ```bash
-docker run -d \
-  --name n8n \
-  --restart unless-stopped \
-  -p 5678:5678 \
-  -v ~/n8n-data:/home/node/.n8n \
-  -e N8N_SECURE_COOKIE=false \
-  -e N8N_PROXY_HOPS=1 \
-  -e WEBHOOK_URL=https://你的tunnel網址.try-cloudflare.com/ \
-  n8nio/n8n
+cd ~/n8n-hubspot
+
+# 把 Step 5 拿到的 tunnel URL 寫進 .env
+# 把下面的 URL 換成你的 tunnel URL
+sed -i 's|WEBHOOK_URL=.*|WEBHOOK_URL=https://你的tunnel網址.try-cloudflare.com|' .env
+
+# 啟動 n8n
+docker compose up -d
 ```
 
-把 `WEBHOOK_URL` 換成 Step 5 拿到的 URL（結尾可不加 `/`，n8n 會自動處理）。
-
+> 為什麼用 `docker compose` 而不是 `docker run`？因為之後 tunnel URL 變了，只需要改 `.env` 再執行 `docker compose up -d --force-recreate`，不用手動 `stop / rm / run` 三步。
+>
 > 為什麼需要 `WEBHOOK_URL`？n8n 用這個環境變數來產生 webhook 的完整 URL。如果沒設，webhook URL 會是 `http://localhost:5678/webhook/...`，HubSpot 打不到。
 >
 > `N8N_PROXY_HOPS=1` 是告訴 n8n 前面有一層 proxy/tunnel，讓它正確信任 `X-Forwarded-*` headers。
@@ -341,25 +417,22 @@ WSL 關掉或電腦重開後，需要重新啟動：
 # 如果你已經用 systemd enable docker，這步通常不需要手動做。
 sudo service docker start
 
-# 2. n8n 會因為 --restart unless-stopped 自動重啟，只需確認它有跑起來
-docker ps --filter "name=n8n"
-
-# 3. 啟動 Cloudflare Tunnel（會得到一個新的 URL）
+# 2. 啟動 Cloudflare Tunnel（會得到一個新的 URL）
 cloudflared tunnel --url http://localhost:5678
 # 複製新的 tunnel URL
+```
 
-# 4. Quick Tunnel URL 變了，所以要用新的 WEBHOOK_URL 重建 n8n container（開另一個終端機）
-docker stop n8n
-docker rm n8n
-docker run -d \
-  --name n8n \
-  --restart unless-stopped \
-  -p 5678:5678 \
-  -v ~/n8n-data:/home/node/.n8n \
-  -e N8N_SECURE_COOKIE=false \
-  -e N8N_PROXY_HOPS=1 \
-  -e WEBHOOK_URL=https://新的tunnel網址.try-cloudflare.com/ \
-  n8nio/n8n
+開另一個終端機：
+
+```bash
+cd ~/n8n-hubspot
+
+# 3. 更新 .env 裡的 WEBHOOK_URL
+# 把下面的 URL 換成新的 tunnel URL
+sed -i 's|WEBHOOK_URL=.*|WEBHOOK_URL=https://新的tunnel網址.try-cloudflare.com|' .env
+
+# 4. 用新的 WEBHOOK_URL 重啟 n8n
+docker compose up -d --force-recreate
 
 # 5. 更新 HubSpot 的 webhook URL（因為 quick tunnel URL 每次都會變）
 ```
@@ -444,12 +517,13 @@ cloudflared tunnel run n8n-dev
 測試完畢，要移除所有東西：
 
 ```bash
-# 停掉並移除 container
-docker stop n8n
-docker rm n8n
+cd ~/n8n-hubspot
 
-# 移除 n8n 資料（⚠️ 會刪掉所有 credentials 和 workflow 歷史）
-rm -rf ~/n8n-data
+# 停掉並移除 container
+docker compose down
+
+# 移除整個 n8n-hubspot 目錄（⚠️ 會刪掉所有 credentials 和 workflow 歷史）
+rm -rf ~/n8n-hubspot
 
 # 移除 cloudflared
 sudo dpkg -r cloudflared
