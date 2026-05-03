@@ -100,6 +100,8 @@
 
 > ⚠️ **Token 只會顯示一次**，請立刻存到密碼管理器。如果忘了，只能重新產生。
 >
+> 💡 建立 Private App 時會看到 **Webhook** tab——**不用填**。這個 tab 是給 Webhook API 訂閱用的（需要 Developer 帳號）。我們的 workflow 用的是 HubSpot Workflow 裡的「Send a webhook」動作來推送事件，不需要在這裡註冊 webhook。設定方式見下方「設定 HubSpot Webhook」章節。
+>
 > 💡 HubSpot 已將 Private Apps 改名為 **舊版應用程式**（Legacy Apps），入口從原本的 Settings → Integrations → Private Apps 移到 Settings → 整合工具 → 舊版應用程式。舊的「私人應用程式」入口會顯示搬遷提示並導向新位置。參考：[HubSpot Legacy Private Apps 文件](https://developers.hubspot.com/docs/apps/legacy-apps/private-apps/overview)
 
 ---
