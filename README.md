@@ -102,14 +102,6 @@
 
 > ⚠️ 如果 n8n 畫面只看到 **HubSpot API**、**HubSpot Developer API**、**HubSpot OAuth2 API**、**HubSpot Service Key**，請選 **HubSpot Service Key**。在 n8n `2.18.5`，這個選項就是原本的 App Token credential。不要選 **HubSpot API**，那會打開舊的/deprecated API Key 欄位。
 >
-> 建議做法：
-> 1. 先刪掉或不要使用這個舊的 HubSpot API credential。
-> 2. 到 workflow 裡點任一個 **HubSpot node** → Credential 欄位 → 建立新的 credential。
-> 3. 在 authentication / auth method 選 **App Token**；建立 credential 時選 **HubSpot Service Key**（有些 n8n 版本會顯示成 **HubSpot App Token**）。
-> 4. 貼上 HubSpot Private App 的 token 後 Save。
->
-> 這份 `workflow.json` 已改用新版 `hubspotAppToken` credential type。若你之前已經 import 過舊版 workflow，建議刪掉舊 workflow 後重新 import 最新的 `workflow.json`，或手動把每個 HubSpot node 的 Authentication 改成 **App Token**。
->
 > n8n 官方文件目前列出的 HubSpot 支援認證方式是 **App token**（給 HubSpot node）、**Developer API key**（給 HubSpot Trigger node）和 **OAuth2**；一般 API Key 已被 HubSpot deprecated，但舊選項可能還會留在 n8n UI 裡。
 
 > ⚠️ **Token 只會顯示一次**，請立刻存到密碼管理器。如果忘了，只能重新產生。
