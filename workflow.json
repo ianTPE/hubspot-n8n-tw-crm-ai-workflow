@@ -19,6 +19,7 @@
     },
     {
       "parameters": {
+        "authentication": "appToken",
         "resource": "contact",
         "operation": "get",
         "contactId": "={{ $json.contactId || $json.objectId || $json.vid }}",
@@ -42,7 +43,7 @@
         300
       ],
       "credentials": {
-        "hubspotApi": {
+        "hubspotAppToken": {
           "id": "",
           "name": "HubSpot Private App"
         }
@@ -51,7 +52,7 @@
     {
       "parameters": {
         "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "hubspotApi",
+        "nodeCredentialType": "hubspotAppToken",
         "url": "=https://api.hubapi.com/crm/v4/objects/contacts/{{ $('Get Contact Details').item.json.id }}/associations/deals",
         "options": {},
         "method": "GET",
@@ -66,7 +67,7 @@
         300
       ],
       "credentials": {
-        "hubspotApi": {
+        "hubspotAppToken": {
           "id": "",
           "name": "HubSpot Private App"
         }
@@ -228,6 +229,7 @@
     },
     {
       "parameters": {
+        "authentication": "appToken",
         "resource": "note",
         "body": "=🤖 AI Lead 跟進簡報\n\nAI 分類：{{ $json.urgency }} / {{ $json.lead_type }}\n原因：{{ $json.reason }}\n建議行動：{{ $json.suggested_action }}\n\n✅ 確認資料\n{{ ($json.confirmed_data || []).map(item => `${item.label || item.field}: ${item.value}`).join('\n') || '無' }}\n\n🔍 AI 推測，待業務確認\n{{ ($json.inferred_data || []).map(item => `${item.label || item.field}: ${item.value}（信心：${item.confidence || 'unknown'}；依據：${item.why || '未提供'}；狀態：${item.status || 'ai_inferred_pending_confirmation'}）`).join('\n') || '無' }}\n\n❓ 待確認\n{{ ($json.missing_data || []).map(item => `${item.label || item.field}: ${item.reason || '需業務確認'}`).join('\n') || '無' }}\n\n📋 建議問法\n{{ ($json.follow_up_questions || []).map((question, index) => `${index + 1}. ${question}`).join('\n') || '無' }}\n\nKPI 提醒：{{ $json.kpi_tracking_hint }}\n\n---\n由 HubSpot + n8n AI Workflow 自動產生。AI 推測資料需由業務確認後再覆蓋正式欄位。",
         "contactId": "={{ $('Get Contact Details').item.json.id }}"
@@ -241,7 +243,7 @@
         300
       ],
       "credentials": {
-        "hubspotApi": {
+        "hubspotAppToken": {
           "id": "",
           "name": "HubSpot Private App"
         }

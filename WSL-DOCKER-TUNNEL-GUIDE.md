@@ -349,6 +349,8 @@ docker logs n8n --tail 20
    - `OpenAI` node → 確認 model（預設 `gpt-4o-mini`）
 5. 點右上角 **Active** 開關啟用 workflow
 
+> 如果 HubSpot credential 畫面只看到 **API Key**、沒有 **App Token / Private App Token / Access Token** 可以選，不要把 Private App Token 填進那個欄位。那是舊的/deprecated HubSpot API Key credential。若你是從舊版 `workflow.json` import 進來，請重新 import 最新 workflow，或從 HubSpot node 的 Authentication 改成 **App Token** 後重新建立 credential。
+>
 > 如果 OpenAI node 顯示 `resource=chat` 不支援，請手動換成新版 **OpenAI Chat Model** node，再重新設定模型與 credential。
 
 ---

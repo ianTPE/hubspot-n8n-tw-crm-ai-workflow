@@ -98,6 +98,18 @@
 7. 進入 App 詳情頁 → 切到 **Auth** tab → 點 **Show token** → 複製 token
 8. 進 n8n → Credentials → Add credential → HubSpot API → 選 App Token → 貼上
 
+> ⚠️ 如果 n8n 畫面只看到 **API Key** 欄位、沒有 **App Token** 可以選，通常代表你開到的是舊的/deprecated HubSpot API credential。就算你安裝的是 `n8nio/n8n:latest`，只要 workflow import 檔引用了舊的 `hubspotApi` credential type，n8n 還是會打開這個舊畫面。不要把 Private App Token 填進這個舊 API Key 欄位。
+>
+> 建議做法：
+> 1. 先刪掉或不要使用這個舊的 HubSpot API credential。
+> 2. 到 workflow 裡點任一個 **HubSpot node** → Credential 欄位 → 建立新的 credential。
+> 3. 在 authentication / auth method 選 **App Token**（有些 n8n 版本會顯示成 **Private App Token** 或 **Access Token**）。
+> 4. 貼上 HubSpot Private App 的 token 後 Save。
+>
+> 這份 `workflow.json` 已改用新版 `hubspotAppToken` credential type。若你之前已經 import 過舊版 workflow，建議刪掉舊 workflow 後重新 import 最新的 `workflow.json`，或手動把每個 HubSpot node 的 Authentication 改成 **App Token**。
+>
+> n8n 官方文件目前列出的 HubSpot 支援認證方式是 **App token**（給 HubSpot node）、**Developer API key**（給 HubSpot Trigger node）和 **OAuth2**；一般 API Key 已被 HubSpot deprecated，但舊選項可能還會留在 n8n UI 裡。
+
 > ⚠️ **Token 只會顯示一次**，請立刻存到密碼管理器。如果忘了，只能重新產生。
 >
 > 💡 建立 Private App 時會看到 **Webhook** tab——**不用填**。這個 tab 是給 Webhook API 訂閱用的（需要 Developer 帳號）。我們的 workflow 用的是 HubSpot Workflow 裡的「Send a webhook」動作來推送事件，不需要在這裡註冊 webhook。設定方式見下方「設定 HubSpot Webhook」章節。
@@ -324,6 +336,8 @@ Email: amy@example.com
    - `OpenAI` node → 確認 model（預設 `gpt-4o-mini`，可換成其他模型）
 5. 點右上角 **Active** 開關啟動 workflow
 6. 複製 Webhook node 顯示的 **Test URL** 和 **Production URL**
+
+> 如果建立 HubSpot credential 時只看到 **API Key**、沒有 **App Token / Private App Token / Access Token**，請不要在那裡硬填。那是 HubSpot 已淘汰的一般 API Key 路徑，Private App Token 需要用 App Token 認證方式。若你是從舊版 `workflow.json` import 進來，請重新 import 最新 workflow，或手動把 HubSpot node 的 Authentication 改成 **App Token**。
 
 ### 設定 HubSpot Webhook
 
