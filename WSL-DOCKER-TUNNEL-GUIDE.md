@@ -177,6 +177,8 @@ cd ~/n8n-hubspot
 cp .env.example .env
 ```
 
+repo 裡已經包含 `docker-compose.yml`、`.env.example`、`.gitignore`，不需要手動建立。
+
 ### 方法 B：手動建立
 
 ```bash
@@ -184,20 +186,10 @@ mkdir -p ~/n8n-hubspot
 cd ~/n8n-hubspot
 ```
 
-目錄結構：
-
-```
-~/n8n-hubspot/
-├── docker-compose.yml    ← Docker Compose 設定
-├── .env.example          ← .env 範本（會進 git）
-├── .env                  ← 實際環境變數（從 .env.example 複製，不會進 git）
-├── .gitignore            ← 排除 .env 和 n8n-data/
-└── n8n-data/             ← n8n 持久化資料（自動產生）
-```
-
 建立 `docker-compose.yml`：
 
 ```yaml
+cat > docker-compose.yml << 'YAML'
 services:
   n8n:
     image: n8nio/n8n:latest  # 正式環境建議 pin 版本，例如 n8nio/n8n:1.82.0
@@ -213,9 +205,10 @@ services:
       - WEBHOOK_URL=${WEBHOOK_URL}
       - GENERIC_TIMEZONE=Asia/Taipei
       - TZ=Asia/Taipei
+YAML
 ```
 
-建立 `.env.example`（範本，會進 git）：
+建立 `.env.example` 並從範本產生 `.env`：
 
 ```bash
 cat > .env.example << 'EOF'
@@ -226,7 +219,6 @@ cat > .env.example << 'EOF'
 WEBHOOK_URL=https://your-tunnel-url.try-cloudflare.com
 EOF
 
-# 從範本建立你的 .env
 cp .env.example .env
 ```
 
@@ -237,6 +229,21 @@ cat > .gitignore << 'EOF'
 .env
 n8n-data/
 EOF
+```
+
+---
+
+### 最終目錄結構
+
+無論用哪種方法，完成後目錄長這樣：
+
+```
+~/n8n-hubspot/
+├── docker-compose.yml    ← Docker Compose 設定
+├── .env.example          ← .env 範本（會進 git）
+├── .env                  ← 實際環境變數（從 .env.example 複製，不會進 git）
+├── .gitignore            ← 排除 .env 和 n8n-data/
+└── n8n-data/             ← n8n 持久化資料（啟動後自動產生）
 ```
 
 > `docker compose` 會自動讀取同目錄的 `.env`，所以 `WEBHOOK_URL` 不用寫死在 `docker-compose.yml` 裡。之後 tunnel URL 變了，只需要改 `.env` 再重啟就好。

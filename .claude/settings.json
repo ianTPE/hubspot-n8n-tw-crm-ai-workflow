@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git check-ignore *)",
+      "Bash(grep -n \"n8nstart\\\\|NT\\\\$830\\\\|NT\\\\$690\" /home/iantpe/GitHub/hubspot-n8n-tw-crm-ai-workflow/README.md)"
+    ]
+  }
+}
