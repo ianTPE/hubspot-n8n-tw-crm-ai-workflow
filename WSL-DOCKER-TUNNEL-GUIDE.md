@@ -339,7 +339,11 @@ docker logs n8n --tail 20
 2. 左上選單 → **Import from File** → 選擇 [`workflow.json`](./workflow.json)
 3. 設定 Credentials：
    - 點每個 **HubSpot node** → 選擇你的 HubSpot credential（n8n `2.18.5` 顯示為 **HubSpot Service Key**；舊版可能顯示 **HubSpot App Token**）
-   - 點 **Get Associated Deals** HTTP Request node → credential type 選 **HubSpot Service Key / HubSpot App Token**，credential 選同一個 Private App Token
+   - 點 **Get Associated Deals** HTTP Request node：
+     - `Authentication` 應該是 **Predefined Credential Type**
+     - 如果有 `Credential Type` 欄位，選 **HubSpot Service Key**（舊版可能顯示 **HubSpot App Token**）
+     - `Credential` 選剛剛同一個 HubSpot Private App Token credential
+     - 如果你看不到 `Credential Type` 欄位，通常代表 `workflow.json` 已經幫你固定成 `hubspotAppToken`；只要在 `Credential` 下拉選同一個 HubSpot credential 即可
    - 點 **OpenAI node** → 選擇你的 OpenAI credential
    - 點 **Slack node** → 選擇 Slack credential（不用 Slack 就刪掉這個 node）
    - 點 **Email node** → 設定 SMTP credential
