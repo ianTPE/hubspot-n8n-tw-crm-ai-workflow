@@ -80,11 +80,11 @@
 
 **設定步驟**：
 
-1. 登入 HubSpot → 左上 ⚙️ Settings
-2. 左側選單 → Integrations → Private Apps
-3. Create private app
+1. 登入 HubSpot → 左上導航列點 **Development**（開發）
+2. 左側選單 → **Legacy Apps**（舊版應用程式）
+3. 右上角點 **Create legacy app** → 選 **Private**
 4. 填 App 名稱（例如 `n8n-workflow`）和描述
-5. 切到 Scopes tab，加入以下權限：
+5. 切到 Scopes tab → 點 **Add new scope**，加入以下權限：
 
 | 類別 | 權限 | Scope 名稱 |
 |---|---|---|
@@ -94,10 +94,13 @@
 | CRM | Owners 讀 | `crm.objects.owners.read` |
 | CRM | Lists 寫 | `crm.lists.write` |
 
-6. Create app → Show token → 複製 token
-7. 進 n8n → Credentials → Add credential → HubSpot API → 選 App Token → 貼上
+6. 點 **Update** 儲存 scopes → 點右上 **Create app** → 點 **Continue creating**
+7. 進入 App 詳情頁 → 切到 **Auth** tab → 點 **Show token** → 複製 token
+8. 進 n8n → Credentials → Add credential → HubSpot API → 選 App Token → 貼上
 
 > ⚠️ **Token 只會顯示一次**，請立刻存到密碼管理器。如果忘了，只能重新產生。
+>
+> 💡 HubSpot 已將 Private Apps 改名為 **Legacy Apps** 並移到 **Development** 區塊。如果你看到舊的 Settings → Integrations → Private Apps 入口，會被自動導到新位置。參考：[HubSpot Legacy Private Apps 文件](https://developers.hubspot.com/docs/apps/legacy-apps/private-apps/overview)
 
 ---
 
