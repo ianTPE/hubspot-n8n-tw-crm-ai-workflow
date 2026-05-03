@@ -450,6 +450,24 @@ docker compose up -d --force-recreate
 
 ## 常見問題
 
+### cloudflared 警告：`ICMP proxy feature is disabled`
+
+這是 WSL 的權限限制，不影響 HTTP tunnel 功能。可以安全忽略。
+
+### cloudflared 警告：`failed to sufficiently increase receive buffer size`
+
+QUIC 連線的 UDP buffer 不夠大，可能略微影響傳輸效率但不會斷線。如果想消除這個警告：
+
+```bash
+# 暫時加大 UDP buffer（重開 WSL 後會還原）
+sudo sysctl -w net.core.rmem_max=7500000
+sudo sysctl -w net.core.wmem_max=7500000
+
+# 如果要永久生效
+sudo bash -c 'echo "net.core.rmem_max=7500000" >> /etc/sysctl.d/99-cloudflared.conf'
+sudo bash -c 'echo "net.core.wmem_max=7500000" >> /etc/sysctl.d/99-cloudflared.conf'
+```
+
 ### Docker 啟動失敗：`Cannot connect to the Docker daemon`
 
 ```bash
