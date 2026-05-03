@@ -338,8 +338,8 @@ docker logs n8n --tail 20
 1. 瀏覽器打開 http://localhost:5678
 2. 左上選單 → **Import from File** → 選擇 [`workflow.json`](./workflow.json)
 3. 設定 Credentials：
-   - 點每個 **HubSpot node** → 選擇你的 HubSpot credential（Private App Token）
-   - 點 **Get Associated Deals** HTTP Request node → credential type 選 HubSpot API，credential 選同一個 Private App Token
+   - 點每個 **HubSpot node** → 選擇你的 HubSpot credential（n8n `2.18.5` 顯示為 **HubSpot Service Key**；舊版可能顯示 **HubSpot App Token**）
+   - 點 **Get Associated Deals** HTTP Request node → credential type 選 **HubSpot Service Key / HubSpot App Token**，credential 選同一個 Private App Token
    - 點 **OpenAI node** → 選擇你的 OpenAI credential
    - 點 **Slack node** → 選擇 Slack credential（不用 Slack 就刪掉這個 node）
    - 點 **Email node** → 設定 SMTP credential
@@ -349,7 +349,7 @@ docker logs n8n --tail 20
    - `OpenAI` node → 確認 model（預設 `gpt-4o-mini`）
 5. 點右上角 **Active** 開關啟用 workflow
 
-> 如果 HubSpot credential 畫面只看到 **API Key**、沒有 **App Token / Private App Token / Access Token** 可以選，不要把 Private App Token 填進那個欄位。那是舊的/deprecated HubSpot API Key credential。若你是從舊版 `workflow.json` import 進來，請重新 import 最新 workflow，或從 HubSpot node 的 Authentication 改成 **App Token** 後重新建立 credential。
+> 如果 HubSpot credential 清單看到 **HubSpot Service Key**，請選它，並把 HubSpot Private App Token 貼到 **Service Key** 欄位。n8n `2.18.5` 把原本的 App Token credential 顯示成這個名稱；不要選 **HubSpot API**，那才是舊的/deprecated API Key credential。
 >
 > 如果 OpenAI node 顯示 `resource=chat` 不支援，請手動換成新版 **OpenAI Chat Model** node，再重新設定模型與 credential。
 

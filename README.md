@@ -39,6 +39,8 @@
 | **OAuth2** | 比較複雜的鑰匙，適合要給別人用的情況 |
 | **Workflow** | 自動化流程——定義「什麼事發生 → 做什麼反應」 |
 
+> n8n 2.x 命名提醒：在 n8n `2.18.5`，Private App Token 對應的 credential 可能顯示成 **HubSpot Service Key**，欄位名稱是 **Service Key**。這個 credential 內部仍是 `hubspotAppToken`，會用 `Authorization: Bearer <token>` 呼叫 HubSpot，可以貼 HubSpot Private App 的 token。不要選 **HubSpot API**，那是舊的 `hapikey` API Key 路徑。
+
 ---
 
 ## HubSpot 認證 Decision Tree
@@ -96,14 +98,14 @@
 
 6. 點 **Update** 儲存 scopes → 點右上 **Create app** → 點 **Continue creating**
 7. 進入 App 詳情頁 → 切到 **Auth** tab → 點 **Show token** → 複製 token
-8. 進 n8n → Credentials → Add credential → HubSpot API → 選 App Token → 貼上
+8. 進 n8n → Credentials → Add credential → 選 **HubSpot Service Key**（或舊版顯示為 **HubSpot App Token**）→ 把 Private App Token 貼到 **Service Key / APP Token** 欄位
 
-> ⚠️ 如果 n8n 畫面只看到 **API Key** 欄位、沒有 **App Token** 可以選，通常代表你開到的是舊的/deprecated HubSpot API credential。就算你安裝的是 `n8nio/n8n:latest`，只要 workflow import 檔引用了舊的 `hubspotApi` credential type，n8n 還是會打開這個舊畫面。不要把 Private App Token 填進這個舊 API Key 欄位。
+> ⚠️ 如果 n8n 畫面只看到 **HubSpot API**、**HubSpot Developer API**、**HubSpot OAuth2 API**、**HubSpot Service Key**，請選 **HubSpot Service Key**。在 n8n `2.18.5`，這個選項就是原本的 App Token credential。不要選 **HubSpot API**，那會打開舊的/deprecated API Key 欄位。
 >
 > 建議做法：
 > 1. 先刪掉或不要使用這個舊的 HubSpot API credential。
 > 2. 到 workflow 裡點任一個 **HubSpot node** → Credential 欄位 → 建立新的 credential。
-> 3. 在 authentication / auth method 選 **App Token**（有些 n8n 版本會顯示成 **Private App Token** 或 **Access Token**）。
+> 3. 在 authentication / auth method 選 **App Token**；建立 credential 時選 **HubSpot Service Key**（有些 n8n 版本會顯示成 **HubSpot App Token**）。
 > 4. 貼上 HubSpot Private App 的 token 後 Save。
 >
 > 這份 `workflow.json` 已改用新版 `hubspotAppToken` credential type。若你之前已經 import 過舊版 workflow，建議刪掉舊 workflow 後重新 import 最新的 `workflow.json`，或手動把每個 HubSpot node 的 Authentication 改成 **App Token**。
@@ -147,7 +149,9 @@
 
 ---
 
-### C. Service Keys（❌ 不建議）
+### C. HubSpot 原生 Service Keys（❌ 不建議）
+
+> 注意：這裡說的是 HubSpot 平台原生的 Server-to-Server OAuth **Service Keys**。n8n `2.18.5` credential 清單裡的 **HubSpot Service Key** 是另一回事：它內部仍是 `hubspotAppToken`，可用來貼 Private App Token。
 
 | 項目 | 說明 |
 |---|---|
@@ -164,7 +168,7 @@
 
 | 認證方式 | n8n Credential 類型 | 需要填什麼 | 適用 Node |
 |---|---|---|---|
-| Private App Token | HubSpot API → App Token | 一個 Access Token | HubSpot node（讀寫聯絡人、Deal、Note） |
+| Private App Token | HubSpot Service Key（舊版可能顯示 HubSpot App Token） | 一個 Access Token / Private App Token | HubSpot node（讀寫聯絡人、Deal、Note） |
 | OAuth2 | HubSpot API → OAuth2 | Client ID + Client Secret | HubSpot node（多租戶場景） |
 | — | Webhook node | 不需要 credential | 接收 HubSpot 推送事件 |
 
@@ -325,8 +329,8 @@ Email: amy@example.com
 1. 下載 [`workflow.json`](./workflow.json)
 2. 打開 n8n → 左上選單 → Import from File → 選擇 `workflow.json`
 3. 設定 Credentials：
-   - 點每個 HubSpot node → 選擇你的 HubSpot credential（Private App Token）
-   - 點 `Get Associated Deals` HTTP Request node → credential type 選 HubSpot API，credential 選同一個 Private App Token
+   - 點每個 HubSpot node → 選擇你的 HubSpot credential（n8n `2.18.5` 顯示為 **HubSpot Service Key**；舊版可能顯示 **HubSpot App Token**）
+   - 點 `Get Associated Deals` HTTP Request node → credential type 選 **HubSpot Service Key / HubSpot App Token**，credential 選同一個 Private App Token
    - 點 OpenAI node → 選擇你的 OpenAI credential
    - 點 Slack node → 選擇你的 Slack credential（如果不用 Slack，可以刪掉這個 node）
    - 點 Email node → 設定 SMTP credential
@@ -337,7 +341,7 @@ Email: amy@example.com
 5. 點右上角 **Active** 開關啟動 workflow
 6. 複製 Webhook node 顯示的 **Test URL** 和 **Production URL**
 
-> 如果建立 HubSpot credential 時只看到 **API Key**、沒有 **App Token / Private App Token / Access Token**，請不要在那裡硬填。那是 HubSpot 已淘汰的一般 API Key 路徑，Private App Token 需要用 App Token 認證方式。若你是從舊版 `workflow.json` import 進來，請重新 import 最新 workflow，或手動把 HubSpot node 的 Authentication 改成 **App Token**。
+> 如果建立 HubSpot credential 時只看到 **API Key** 欄位，請不要在那裡硬填。那是 HubSpot 已淘汰的一般 API Key 路徑。n8n `2.18.5` 請改選 **HubSpot Service Key**，把 HubSpot Private App Token 貼到 **Service Key** 欄位；舊版 n8n 則可能顯示為 **HubSpot App Token / APP Token**。
 
 ### 設定 HubSpot Webhook
 
